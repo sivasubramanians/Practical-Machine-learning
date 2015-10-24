@@ -1,0 +1,90 @@
+---
+title: "Prediction Assignment - Predicting effectiveness of activity"
+author: "Siva Sethu"
+output: html_document
+---
+
+# Executive Summary
+The goal of our analysis explained in this write-up is to create a machine learning algorithm to accurately predict how effectively (how well) the activity was performed.In this project, we are using data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. These participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways (which corresponds to the Classe variable in our data set). These classes are (as outlined in http://groupware.les.inf.puc-rio.br/har)  
+- Class A - exactly according to the specification    
+- Class B - throwing the elbows to the front   
+- Class C - lifting the dumbbell only halfway  
+- Class D - lowering the dumbbell only halfway  
+- Class E - throwing the hips to the front   
+
+# Data Processing
+The below steps are required to download the training & test datasets from the URL provided and assign to respective data frames. While populating the dataframe, we are ensuring all missing values are updated with "NA" values for subsequent processing
+
+
+```{r}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "pml-training.csv",method="curl")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = "pml-testing.csv",method="curl")
+
+training_df <- read.csv("pml-training.csv", na.strings = c("NA", "","#DIV/0!"))
+
+dim(training_df)
+
+testing_df <- read.csv("pml-testing.csv", na.strings = c("NA", "","#DIV/0!"))
+dim(testing_df)
+
+```
+
+Next, we load the required files required for our analysis
+```{r}
+library(caret)
+library(randomForest) 
+```
+To ensure reproduceablity of the code, we will set the seed , so that the code produces the same result for each run. 
+
+To avoid overfitting and to include only predictors that have an impact on the outcome, we will remove columns with all missing value and also the first 7 columns which are primarily columns having only metadata about the individual observations and will not have any impact on the outcome
+
+```{r}
+set.seed(12345)
+training_df <- training_df[,colSums(is.na(training_df)) == 0]
+training_df <- training_df[,-c(1:7)]
+
+testing_df <- testing_df[,colSums(is.na(testing_df)) == 0]
+testing_df <- testing_df[,-c(1:7)]
+```
+
+# Creating training & validation datasets for training & cross-validation
+Since the test dataset only has 20 observations, while the training dataset has 19622 observations, we will create a validation dataset from the training set, so that we can perform cross-validation of the model developed using the training dataset.
+
+```{r}
+trn_index <- createDataPartition(y=training_df$classe, p=0.75, list=FALSE)
+newTrainingData <- training_df[trn_index, ] 
+dim(newTrainingData)
+
+newValidationData <- training_df[-trn_index, ]
+dim(newValidationData)
+```
+
+# Selecting the correct Prediction Model
+It is important to identify the correct algorithm to build our prediction model. We will use two of the algorithms - classification tree(decision tree) and random Forest algorithms and check the accuracy of the models. We will then train our dataset with the most accurate algorithm to build our prediction model
+
+## Prediction Model and cross-validation using decision tree algorithm
+
+```{r}
+mod_rpart <- train(classe ~ ., data = newTrainingData, method = "rpart")
+pred_rpart <- predict(mod_rpart,newValidationData)
+
+confusionMatrix(pred_rpart,newValidationData$classe)
+```
+
+## Prediction Model and cross-validation using Random Forest algorithm
+```{r}
+mod_rf <- randomForest(classe ~ ., data = newTrainingData, method = "class")
+pred_rf <- predict(mod_rf,newValidationData, type = "class")
+
+confusionMatrix(pred_rf,newValidationData$classe)
+
+```
+
+# Finalizing the correct prediction model & Out of sample error estimation
+As could be evidenced in the outputs above, the prediction model built using Random Forest algorithm is 99.57% (accuracy of 0.9957) accurate when applied to the cross-validation dataset. The expected out of Sample error will be 1 - accuracy, which is equal to 0.0043 or 0.43%. With 99.57% accuracy, we can confidently apply this model on testing dataset. 
+
+# Applying the model to predict outcome on testing dataset
+```{r}
+pred_test <- predict(mod_rf,testing_df, type = "class")
+pred_test
+```
